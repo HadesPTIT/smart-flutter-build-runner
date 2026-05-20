@@ -2,7 +2,7 @@
   "name": "smart-flutter-build-runner",
   "displayName": "Smart Flutter Build Runner",
   "description": "An enhanced, smart VS Code extension to manage Flutter and Dart build_runner tasks with active status indicators, quick controls, and auto-detecting FVM.",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "publisher": "hadesptit",
   "license": "MIT",
   "engines": {

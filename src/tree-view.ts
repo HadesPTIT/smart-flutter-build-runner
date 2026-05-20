@@ -1,7 +1,7 @@
 import * as vsc from 'vscode';
 import { readYaml } from './read-yaml';
 import { scanWorkspace } from './scan-workspace';
-import { BuildRunnerTaskDefinition } from './tasks';
+import { BuildRunnerTaskDefinition, activeExecutions } from './tasks';
 
 const GLOB_PATTERN = '**/pubspec.yaml';
 const PUBSPEC_YAML_REGEX = /pubspec\.yaml$/;
@@ -53,8 +53,8 @@ export class ProjectTreeItem extends vsc.TreeItem {
 
     // 2. Set Description
     const statusText = this.status === 'watching' ? '(watching...) • ' :
-                       this.status === 'building' ? '(building...) • ' :
-                       this.status === 'failed'   ? '(failed) • ' : '';
+      this.status === 'building' ? '(building...) • ' :
+        this.status === 'failed' ? '(failed) • ' : '';
     this.description = `${statusText}${this.relativePath || '.'}`;
 
     // 3. Set Icon
@@ -165,6 +165,10 @@ export function registerTreeView(context: vsc.ExtensionContext): void {
       if (def && def.type === 'smart_build_runner') {
         const packagePath = def.packagePath;
         const taskType = def.taskType;
+
+        // Clean up from active executions
+        activeExecutions.delete(packagePath);
+
         if (e.exitCode !== undefined && e.exitCode !== 0) {
           if (taskType === 'watch') {
             provider.setStatus(packagePath, 'idle');

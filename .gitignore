@@ -26,3 +26,6 @@ out/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# AI
+.agents

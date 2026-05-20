@@ -22,16 +22,27 @@ export async function createTask(
     ? vsc.Uri.joinPath(uri, '..').fsPath
     : uri.fsPath;
 
-  // Smart FVM detection: check if global setting is true OR local .fvm folder exists
+  // Smart FVM detection: check if global setting is true OR any parent folder contains .fvm
   const globalFvm = vsc.workspace.getConfiguration().get('smart_build_runner.fvm', false);
   let useFvm = globalFvm;
   if (!useFvm) {
-    try {
-      const fvmUri = vsc.Uri.file(path.join(cwd, '.fvm'));
-      const stat = await vsc.workspace.fs.stat(fvmUri);
-      useFvm = stat.type === vsc.FileType.Directory;
-    } catch {
-      // .fvm directory not found
+    let currentDir = cwd;
+    while (currentDir) {
+      try {
+        const fvmUri = vsc.Uri.file(path.join(currentDir, '.fvm'));
+        const stat = await vsc.workspace.fs.stat(fvmUri);
+        if (stat.type === vsc.FileType.Directory) {
+          useFvm = true;
+          break;
+        }
+      } catch {
+        // .fvm directory not found in this folder
+      }
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir) {
+        break;
+      }
+      currentDir = parentDir;
     }
   }
 
