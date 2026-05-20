@@ -1,0 +1,28 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_packages/
+
+# Build artifacts
+dist/
+out/
+
+# VS Code test cache
+.vscode-test/
+
+# VSIX packaging output
+*.vsix
+
+# Dart / Flutter build files (inside example)
+**/example/**/.dart_tool/
+**/example/**/.packages
+**/example/**/.flutter-plugins
+**/example/**/.flutter-plugins-dependencies
+**/example/**/generated/
+**/example/**/build/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini

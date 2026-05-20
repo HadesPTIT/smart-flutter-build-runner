@@ -1,0 +1,190 @@
+{
+  "name": "smart-flutter-build-runner",
+  "displayName": "Smart Flutter Build Runner",
+  "description": "An enhanced, smart VS Code extension to manage Flutter and Dart build_runner tasks with active status indicators, quick controls, and auto-detecting FVM.",
+  "version": "1.0.0",
+  "publisher": "hadesptit",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "flutter",
+    "dart",
+    "build_runner",
+    "freezed",
+    "json_serializable"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "static/icon.png",
+  "activationEvents": [
+    "onLanguage:dart",
+    "workspaceContains:**/pubspec.yaml"
+  ],
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "Smart Flutter Build Runner",
+      "properties": {
+        "smart_build_runner.fvm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Force using FVM globally to run build_runner commands. (Extension will also auto-detect local .fvm folders)."
+        },
+        "smart_build_runner.excludes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns to exclude from scanning (e.g. ['**/ios/**', '**/android/**'])."
+        },
+        "smart_build_runner.args": {
+          "type": "string",
+          "default": "--delete-conflicting-outputs",
+          "description": "Additional arguments passed to build_runner build and watch commands."
+        }
+      }
+    },
+    "commands": [
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.build",
+        "title": "Build",
+        "icon": "$(play)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.watch",
+        "title": "Watch",
+        "icon": "$(sync)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.clean",
+        "title": "Clean",
+        "icon": "$(trash)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.cleanBuild",
+        "title": "Clean & Build",
+        "icon": "$(run-errors)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.stop",
+        "title": "Stop",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.showTerminal",
+        "title": "Show Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "smart_build_runner.build",
+          "when": "false"
+        },
+        {
+          "command": "smart_build_runner.watch",
+          "when": "false"
+        },
+        {
+          "command": "smart_build_runner.clean",
+          "when": "false"
+        },
+        {
+          "command": "smart_build_runner.cleanBuild",
+          "when": "false"
+        },
+        {
+          "command": "smart_build_runner.stop",
+          "when": "false"
+        },
+        {
+          "command": "smart_build_runner.showTerminal",
+          "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "smart_build_runner.build",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed)",
+          "group": "inline@1"
+        },
+        {
+          "command": "smart_build_runner.watch",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed)",
+          "group": "inline@2"
+        },
+        {
+          "command": "smart_build_runner.clean",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed)",
+          "group": "inline@3"
+        },
+        {
+          "command": "smart_build_runner.cleanBuild",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed)",
+          "group": "inline@4"
+        },
+        {
+          "command": "smart_build_runner.stop",
+          "when": "view == smart_build_runner_view && (viewItem == file-watching || viewItem == file-building)",
+          "group": "inline@1"
+        },
+        {
+          "command": "smart_build_runner.showTerminal",
+          "when": "view == smart_build_runner_view && (viewItem == file-watching || viewItem == file-building)",
+          "group": "inline@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "smart_build_runner.refresh",
+          "when": "view == smart_build_runner_view",
+          "group": "navigation"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "smart_build_runner_view",
+          "name": "BUILD RUNNER",
+          "when": "smartBuildRunner.hasItems",
+          "icon": "static/icon.png"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rollup/pluginutils": "^5.1.0",
+    "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "esbuild": "^0.19.0",
+    "typescript": "^5.0.0"
+  }
+}
