@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4] (1cdd517) - 2026-05-21
+
+### Added
+- **Toast Notifications**: Added VS Code toast notifications for build task events (success message for one-shot tasks, error message for failed tasks).
+- **Interactive Quick Actions**: Integrated action buttons in the error popups:
+  - **"Show Terminal"** to focus the failed task's terminal output.
+  - **"Retry"** to rerun the failed task.
+- **Task Re-run Memory**: Implemented a `lastRunConfig` cache to preserve exact arguments for retry execution.
+- **Manual Stop Suppression**: Added `stoppedDeliberately` logic to skip error popups when tasks are manually stopped by the user.
+
+### Changed Files
+| File Name | Description |
+| :--- | :--- |
+| [package.json](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/package.json) | Bump version to `1.0.4`. |
+| [src/tasks.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/tasks.ts) | Track manually stopped tasks, record running parameters, and implement `retryTask`. |
+| [src/tree-view.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/tree-view.ts) | Handle task exit codes, show success/error alerts, and execute actions when buttons are clicked. |
+
+---
+
 ## [1.0.3] (f0f6b96) - 2026-05-21
 
 ### Added

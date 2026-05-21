@@ -1,7 +1,8 @@
 import * as vsc from 'vscode';
 import { readYaml } from './read-yaml';
 import { scanWorkspace } from './scan-workspace';
-import { BuildRunnerTaskDefinition, activeExecutions } from './tasks';
+import * as path from 'node:path';
+import { BuildRunnerTaskDefinition, activeExecutions, stoppedDeliberately, showTerminal, retryTask } from './tasks';
 
 const GLOB_PATTERN = '**/pubspec.yaml';
 const PUBSPEC_YAML_REGEX = /pubspec\.yaml$/;
@@ -153,6 +154,7 @@ export function registerTreeView(context: vsc.ExtensionContext): void {
       if (def && def.type === 'smart_build_runner') {
         const packagePath = def.packagePath;
         const taskType = def.taskType;
+        stoppedDeliberately.delete(packagePath);
         if (taskType === 'watch') {
           provider.setStatus(packagePath, 'watching');
         } else {
@@ -160,7 +162,7 @@ export function registerTreeView(context: vsc.ExtensionContext): void {
         }
       }
     }),
-    vsc.tasks.onDidEndTaskProcess((e) => {
+    vsc.tasks.onDidEndTaskProcess(async (e) => {
       const def = e.execution.task.definition as BuildRunnerTaskDefinition;
       if (def && def.type === 'smart_build_runner') {
         const packagePath = def.packagePath;
@@ -169,14 +171,36 @@ export function registerTreeView(context: vsc.ExtensionContext): void {
         // Clean up from active executions
         activeExecutions.delete(packagePath);
 
+        const taskName = e.execution.task.name;
+
         if (e.exitCode !== undefined && e.exitCode !== 0) {
           if (taskType === 'watch') {
             provider.setStatus(packagePath, 'idle');
           } else {
             provider.setStatus(packagePath, 'failed');
           }
+
+          if (stoppedDeliberately.has(packagePath)) {
+            stoppedDeliberately.delete(packagePath);
+          } else {
+            const choice = await vsc.window.showErrorMessage(
+              `Build failed: "${taskName}" in package: ${path.basename(packagePath)}`,
+              'Show Terminal',
+              'Retry'
+            );
+            if (choice === 'Show Terminal') {
+              showTerminal(packagePath);
+            } else if (choice === 'Retry') {
+              retryTask(packagePath);
+            }
+          }
         } else {
           provider.setStatus(packagePath, 'idle');
+          if (taskType !== 'watch') {
+            vsc.window.showInformationMessage(
+              `Build succeeded: "${taskName}" in package: ${path.basename(packagePath)}`
+            );
+          }
         }
       }
     })

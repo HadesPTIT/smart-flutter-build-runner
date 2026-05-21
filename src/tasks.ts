@@ -8,13 +8,28 @@ interface PubspecYaml {
   dev_dependencies?: Record<string, unknown>;
 }
 
+export interface TaskConfig {
+  packagePath: string;
+  uri: vsc.Uri;
+  title: string;
+  taskType: 'watch' | 'build' | 'clean' | 'cleanBuild' | 'buildFile';
+  isWorkspace: boolean;
+  fileUri?: vsc.Uri;
+}
+
+// Track manually stopped packages to suppress false error popups
+export const stoppedDeliberately = new Set<string>();
+
+// Track the parameters of the last run for retry support
+export const lastRunConfig = new Map<string, TaskConfig>();
+
 // Map to track active executions by package path
 export const activeExecutions = new Map<string, vsc.TaskExecution>();
 
 export interface BuildRunnerTaskDefinition extends vsc.TaskDefinition {
   type: 'smart_build_runner';
   packagePath: string;
-  taskType: 'watch' | 'build' | 'clean' | 'cleanBuild';
+  taskType: 'watch' | 'build' | 'clean' | 'cleanBuild' | 'buildFile';
 }
 
 export async function createTask(
@@ -95,6 +110,13 @@ export async function createTask(
   try {
     const execution = await vsc.tasks.executeTask(task);
     activeExecutions.set(packagePath, execution);
+    lastRunConfig.set(packagePath, {
+      packagePath,
+      uri,
+      title,
+      taskType: type,
+      isWorkspace,
+    });
     return execution;
   } catch (err: any) {
     vsc.window.showErrorMessage(`Failed to start task '${taskLabel}': ${err.message}`);
@@ -103,6 +125,7 @@ export async function createTask(
 }
 
 export function stopTask(packagePath: string) {
+  stoppedDeliberately.add(packagePath);
   const execution = activeExecutions.get(packagePath);
   if (execution) {
     try {
@@ -129,6 +152,7 @@ export function stopTask(packagePath: string) {
 
 export function stopAllTasks() {
   for (const [packagePath, execution] of activeExecutions.entries()) {
+    stoppedDeliberately.add(packagePath);
     try {
       execution.terminate();
     } catch {
@@ -141,6 +165,9 @@ export function stopAllTasks() {
   for (const exec of executions) {
     const def = exec.task.definition as BuildRunnerTaskDefinition;
     if (def.type === 'smart_build_runner') {
+      if (def.packagePath) {
+        stoppedDeliberately.add(def.packagePath);
+      }
       try {
         exec.terminate();
       } catch {
@@ -311,10 +338,32 @@ export async function buildCurrentFile(uri?: vsc.Uri) {
   try {
     const execution = await vsc.tasks.executeTask(task);
     activeExecutions.set(packagePath, execution);
+    lastRunConfig.set(packagePath, {
+      packagePath,
+      uri: pubspecUri,
+      title: (typeof pubspec?.name === 'string') ? pubspec.name : path.basename(packagePath),
+      taskType: 'buildFile',
+      isWorkspace: false,
+      fileUri: targetUri,
+    });
     return execution;
   } catch (err: any) {
     vsc.window.showErrorMessage(`Failed to start task '${taskLabel}': ${err.message}`);
     return null;
+  }
+}
+
+export async function retryTask(packagePath: string) {
+  const config = lastRunConfig.get(packagePath);
+  if (!config) {
+    vsc.window.showErrorMessage(`No previous build configuration found for ${packagePath}.`);
+    return;
+  }
+
+  if (config.taskType === 'buildFile') {
+    return buildCurrentFile(config.fileUri);
+  } else {
+    return createTask(config.packagePath, config.uri, config.title, config.taskType as any, config.isWorkspace);
   }
 }
 
