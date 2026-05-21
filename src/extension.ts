@@ -1,6 +1,6 @@
 import * as vsc from 'vscode';
-import { ProjectTreeItem, refreshTreeView, registerTreeView } from './tree-view';
-import { createTask, stopTask, showTerminal, buildCurrentFile } from './tasks';
+import { ProjectTreeItem, MelosScriptTreeItem, refreshTreeView, registerTreeView, pinPackage, unpinPackage } from './tree-view';
+import { createTask, stopTask, showTerminal, buildCurrentFile, createMelosTask, stopAllTasks } from './tasks';
 
 export async function activate(context: vsc.ExtensionContext) {
   context.subscriptions.push(
@@ -51,10 +51,46 @@ export async function activate(context: vsc.ExtensionContext) {
       'smart_build_runner.buildCurrentFile',
       (uri?: vsc.Uri) => buildCurrentFile(uri),
     ),
+
+    // 9. Stop All Tasks Command
+    vsc.commands.registerCommand(
+      'smart_build_runner.stopAll',
+      () => stopAllTasks(),
+    ),
+
+    // 10. Pin Package Command
+    vsc.commands.registerCommand(
+      'smart_build_runner.pinPackage',
+      (item: ProjectTreeItem) => {
+        if (item && item.packagePath) {
+          pinPackage(item.packagePath);
+        }
+      },
+    ),
+
+    // 11. Unpin Package Command
+    vsc.commands.registerCommand(
+      'smart_build_runner.unpinPackage',
+      (item: ProjectTreeItem) => {
+        if (item && item.packagePath) {
+          unpinPackage(item.packagePath);
+        }
+      },
+    ),
+
+    // 12. Run Melos Script Command
+    vsc.commands.registerCommand(
+      'smart_build_runner.runMelosScript',
+      (item: MelosScriptTreeItem) => {
+        if (item && item.scriptName && item.workspaceFolder) {
+          createMelosTask(item.workspaceFolder, item.scriptName);
+        }
+      },
+    ),
   );
 
   // Initialize and register Tree View and task state listeners
   registerTreeView(context);
 }
 
-export function deactivate() {}
+export function deactivate() { }

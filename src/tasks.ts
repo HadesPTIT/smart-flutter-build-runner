@@ -12,9 +12,10 @@ export interface TaskConfig {
   packagePath: string;
   uri: vsc.Uri;
   title: string;
-  taskType: 'watch' | 'build' | 'clean' | 'cleanBuild' | 'buildFile';
+  taskType: 'watch' | 'build' | 'clean' | 'cleanBuild' | 'buildFile' | 'melos';
   isWorkspace: boolean;
   fileUri?: vsc.Uri;
+  scriptName?: string;
 }
 
 // Track manually stopped packages to suppress false error popups
@@ -29,7 +30,33 @@ export const activeExecutions = new Map<string, vsc.TaskExecution>();
 export interface BuildRunnerTaskDefinition extends vsc.TaskDefinition {
   type: 'smart_build_runner';
   packagePath: string;
-  taskType: 'watch' | 'build' | 'clean' | 'cleanBuild' | 'buildFile';
+  taskType: 'watch' | 'build' | 'clean' | 'cleanBuild' | 'buildFile' | 'melos';
+  scriptName?: string;
+}
+
+async function detectFvm(startDir: string): Promise<boolean> {
+  const globalFvm = vsc.workspace.getConfiguration().get('smart_build_runner.fvm', false);
+  if (globalFvm) {
+    return true;
+  }
+  let currentDir = startDir;
+  while (currentDir) {
+    try {
+      const fvmUri = vsc.Uri.file(path.join(currentDir, '.fvm'));
+      const stat = await vsc.workspace.fs.stat(fvmUri);
+      if (stat.type === vsc.FileType.Directory) {
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+    currentDir = parentDir;
+  }
+  return false;
 }
 
 export async function createTask(
@@ -44,29 +71,7 @@ export async function createTask(
     : uri.fsPath;
 
   // Smart FVM detection: check if global setting is true OR any parent folder contains .fvm
-  const globalFvm = vsc.workspace.getConfiguration().get('smart_build_runner.fvm', false);
-  let useFvm = globalFvm;
-  if (!useFvm) {
-    let currentDir = cwd;
-    while (currentDir) {
-      try {
-        const fvmUri = vsc.Uri.file(path.join(currentDir, '.fvm'));
-        const stat = await vsc.workspace.fs.stat(fvmUri);
-        if (stat.type === vsc.FileType.Directory) {
-          useFvm = true;
-          break;
-        }
-      } catch {
-        // .fvm directory not found in this folder
-      }
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        break;
-      }
-      currentDir = parentDir;
-    }
-  }
-
+  const useFvm = await detectFvm(cwd);
   const fvmPrefix = useFvm ? 'fvm ' : '';
   const args = vsc.workspace.getConfiguration().get('smart_build_runner.args', '--delete-conflicting-outputs');
   const workspaceArg = isWorkspace ? ' --workspace' : '';
@@ -181,7 +186,7 @@ export function showTerminal(packagePath: string) {
   // Find terminal matching the package path by looking at running task executions
   const execution = activeExecutions.get(packagePath);
   const taskLabel = execution?.task.name;
-  
+
   if (taskLabel) {
     const terminal = vsc.window.terminals.find(t =>
       t.name.toLowerCase().includes(taskLabel.toLowerCase())
@@ -246,7 +251,7 @@ export async function buildCurrentFile(uri?: vsc.Uri) {
   }
 
   const { packagePath, pubspecUri } = packageRootInfo;
-  
+
   // Calculate relative path with forward slashes
   const relativePath = path.relative(packagePath, filePath).replace(/\\/g, '/');
   const filterPattern = relativePath.replace(/\.dart$/, '.*');
@@ -283,32 +288,10 @@ export async function buildCurrentFile(uri?: vsc.Uri) {
   }
 
   // Detect FVM (FVM check starts from packagePath)
-  const globalFvm = vsc.workspace.getConfiguration().get('smart_build_runner.fvm', false);
-  let useFvm = globalFvm;
-  if (!useFvm) {
-    let currentDir = packagePath;
-    while (currentDir) {
-      try {
-        const fvmUri = vsc.Uri.file(path.join(currentDir, '.fvm'));
-        const stat = await vsc.workspace.fs.stat(fvmUri);
-        if (stat.type === vsc.FileType.Directory) {
-          useFvm = true;
-          break;
-        }
-      } catch {
-        // ignore
-      }
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        break;
-      }
-      currentDir = parentDir;
-    }
-  }
-
+  const useFvm = await detectFvm(packagePath);
   const fvmPrefix = useFvm ? 'fvm ' : '';
   const command = `${fvmPrefix}dart run build_runner build --delete-conflicting-outputs --build-filter="${filterPattern}"`;
-  
+
   const fileName = path.basename(filePath);
   const taskLabel = `build file: ${fileName}`;
 
@@ -362,8 +345,67 @@ export async function retryTask(packagePath: string) {
 
   if (config.taskType === 'buildFile') {
     return buildCurrentFile(config.fileUri);
+  } else if (config.taskType === 'melos' && config.scriptName) {
+    const workspaceFolder = vsc.workspace.getWorkspaceFolder(config.uri);
+    if (workspaceFolder) {
+      return createMelosTask(workspaceFolder, config.scriptName);
+    }
   } else {
     return createTask(config.packagePath, config.uri, config.title, config.taskType as any, config.isWorkspace);
+  }
+}
+
+export async function createMelosTask(
+  workspaceFolder: vsc.WorkspaceFolder,
+  scriptName: string,
+) {
+  const cwd = workspaceFolder.uri.fsPath;
+  const useFvm = await detectFvm(cwd);
+  const fvmPrefix = useFvm ? 'fvm ' : '';
+  const command = `${fvmPrefix}dart run melos run ${scriptName}`;
+  const taskLabel = `${fvmPrefix}melos run ${scriptName}`;
+  const packagePath = `melos-script:${cwd}:${scriptName}`;
+
+  const definition: BuildRunnerTaskDefinition = {
+    type: 'smart_build_runner',
+    packagePath,
+    taskType: 'melos',
+    scriptName,
+  };
+
+  const task = new vsc.Task(
+    definition,
+    workspaceFolder,
+    taskLabel,
+    'smart_build_runner',
+    new vsc.ShellExecution(command, { cwd }),
+  );
+
+  task.presentationOptions = {
+    reveal: vsc.TaskRevealKind.Always,
+    panel: vsc.TaskPanelKind.Shared,
+    clear: false,
+    close: false,
+    showReuseMessage: false,
+    focus: true,
+  };
+
+  try {
+    const execution = await vsc.tasks.executeTask(task);
+    activeExecutions.set(packagePath, execution);
+    lastRunConfig.set(packagePath, {
+      packagePath,
+      uri: workspaceFolder.uri,
+      title: scriptName,
+      taskType: 'melos',
+      isWorkspace: true,
+      fileUri: workspaceFolder.uri,
+      scriptName,
+    });
+    return execution;
+  } catch (err: any) {
+    vsc.window.showErrorMessage(`Failed to start Melos script '${scriptName}': ${err.message}`);
+    return null;
   }
 }
 

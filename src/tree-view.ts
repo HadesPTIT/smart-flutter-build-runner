@@ -2,11 +2,14 @@ import * as vsc from 'vscode';
 import { readYaml } from './read-yaml';
 import { scanWorkspace } from './scan-workspace';
 import * as path from 'node:path';
+import * as yaml from 'yaml';
 import { BuildRunnerTaskDefinition, activeExecutions, stoppedDeliberately, showTerminal, retryTask } from './tasks';
 
 const GLOB_PATTERN = '**/pubspec.yaml';
 const PUBSPEC_YAML_REGEX = /pubspec\.yaml$/;
 const LEADING_SLASH_REGEX = /^\//;
+
+const textDecoder = new TextDecoder();
 
 export type PackageStatus = 'idle' | 'building' | 'watching' | 'failed';
 
@@ -43,14 +46,15 @@ export class ProjectTreeItem extends vsc.TreeItem {
     readonly relativePath: string,
     readonly isWorkspace: boolean = false,
     public status: PackageStatus = 'idle',
+    public isPinned: boolean = false,
   ) {
-    super(title, vsc.TreeItemCollapsibleState.None);
+    super(isPinned ? `📌 ${title}` : title, vsc.TreeItemCollapsibleState.None);
     this.updateState();
   }
 
   updateState() {
     // 1. Set Context Value for inline menus (matches file-idle, file-watching, etc.)
-    this.contextValue = `file-${this.status}`;
+    this.contextValue = this.isPinned ? `file-${this.status}-pinned` : `file-${this.status}`;
 
     // 2. Set Description
     const statusText = this.status === 'watching' ? '(watching...) • ' :
@@ -69,6 +73,9 @@ export class ProjectTreeItem extends vsc.TreeItem {
       this.iconPath = new vsc.ThemeIcon('package');
     }
 
+    // Update label to reflect pin status dynamically if pin changes
+    this.label = this.isPinned ? `📌 ${this.title}` : this.title;
+
     // 4. Tooltip
     this.tooltip = `${this.title}\nPath: ${this.packagePath}\nStatus: ${this.status}`;
 
@@ -81,19 +88,68 @@ export class ProjectTreeItem extends vsc.TreeItem {
   }
 }
 
-class TreeProvider implements vsc.TreeDataProvider<ProjectTreeItem> {
-  private readonly onDidChangeTreeDataEmitter = new vsc.EventEmitter<ProjectTreeItem | undefined | void>();
+export class MelosScriptTreeItem extends vsc.TreeItem {
+  public status: 'idle' | 'running' = 'idle';
+
+  constructor(
+    public readonly scriptName: string,
+    public readonly runCommand: string,
+    public readonly workspaceFolder: vsc.WorkspaceFolder,
+    public readonly descriptionText?: string,
+  ) {
+    super(scriptName, vsc.TreeItemCollapsibleState.None);
+    this.contextValue = 'melos-script';
+    this.updateState();
+  }
+
+  updateState() {
+    if (this.status === 'running') {
+      this.iconPath = new vsc.ThemeIcon('loading~spin', new vsc.ThemeColor('charts.blue'));
+      this.description = `(running...) • ${this.descriptionText || this.runCommand}`;
+    } else {
+      this.iconPath = new vsc.ThemeIcon('play');
+      this.description = this.descriptionText || this.runCommand;
+    }
+    this.tooltip = `Melos Script: ${this.scriptName}\nCommand: ${this.runCommand}`;
+    this.command = {
+      title: 'Run Melos Script',
+      command: 'smart_build_runner.runMelosScript',
+      arguments: [this],
+    };
+  }
+}
+
+export class GroupTreeItem extends vsc.TreeItem {
+  constructor(
+    public readonly label: string,
+    public readonly children: (MelosScriptTreeItem | ProjectTreeItem)[],
+  ) {
+    super(label, vsc.TreeItemCollapsibleState.Expanded);
+    this.contextValue = 'group-item';
+  }
+}
+
+export type BuildRunnerTreeItem = GroupTreeItem | MelosScriptTreeItem | ProjectTreeItem;
+
+class TreeProvider implements vsc.TreeDataProvider<BuildRunnerTreeItem> {
+  private readonly onDidChangeTreeDataEmitter = new vsc.EventEmitter<BuildRunnerTreeItem | undefined | void>();
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
   private items: ProjectTreeItem[] = [];
+  private melosScripts: MelosScriptTreeItem[] = [];
+  private isMelosWorkspace = false;
+  private groupItems: GroupTreeItem[] = [];
   private statuses = new Map<string, PackageStatus>();
 
   refresh(): void {
     this.onDidChangeTreeDataEmitter.fire();
   }
 
-  setItems(items: ProjectTreeItem[]): void {
+  setItems(items: ProjectTreeItem[], melosScripts: MelosScriptTreeItem[], isMelosWorkspace: boolean): void {
     this.items = items;
+    this.melosScripts = melosScripts;
+    this.isMelosWorkspace = isMelosWorkspace;
+
     // Keep statuses map in sync for found packages
     for (const item of items) {
       if (!this.statuses.has(item.packagePath)) {
@@ -103,6 +159,14 @@ class TreeProvider implements vsc.TreeDataProvider<ProjectTreeItem> {
         item.status = this.statuses.get(item.packagePath)!;
         item.updateState();
       }
+    }
+
+    if (isMelosWorkspace) {
+      const scriptGroup = new GroupTreeItem('Melos Scripts', melosScripts);
+      const packagesGroup = new GroupTreeItem('Packages', items);
+      this.groupItems = [scriptGroup, packagesGroup];
+    } else {
+      this.groupItems = [];
     }
   }
 
@@ -122,20 +186,65 @@ class TreeProvider implements vsc.TreeDataProvider<ProjectTreeItem> {
     return this.statuses.get(packagePath) || 'idle';
   }
 
-  getTreeItem(element: ProjectTreeItem): ProjectTreeItem {
+  setMelosScriptStatus(packagePath: string, status: 'idle' | 'running'): void {
+    const item = this.melosScripts.find(i => `melos-script:${i.workspaceFolder.uri.fsPath}:${i.scriptName}` === packagePath);
+    if (item) {
+      item.status = status;
+      item.updateState();
+      this.onDidChangeTreeDataEmitter.fire(item);
+    }
+  }
+
+  getTreeItem(element: BuildRunnerTreeItem): vsc.TreeItem {
     return element;
   }
 
-  getChildren(): ProjectTreeItem[] {
-    return this.items;
+  getChildren(element?: BuildRunnerTreeItem): BuildRunnerTreeItem[] {
+    if (!element) {
+      if (this.isMelosWorkspace) {
+        return this.groupItems;
+      }
+      return this.items;
+    }
+    if (element instanceof GroupTreeItem) {
+      return element.children;
+    }
+    return [];
   }
 }
 
 let treeViewDisposable: vsc.Disposable | undefined;
 let watcher: vsc.FileSystemWatcher | undefined;
+let extensionContext: vsc.ExtensionContext | undefined;
 export const provider = new TreeProvider();
 const yamlCache = new Map<string, FileCacheEntry>();
 const loadRequestController = new LatestRequestController();
+
+export function getPinnedPackages(): string[] {
+  if (!extensionContext) return [];
+  return extensionContext.workspaceState.get<string[]>('pinnedPackages', []);
+}
+
+export function pinPackage(packagePath: string) {
+  if (!extensionContext) return;
+  const pinned = getPinnedPackages();
+  if (!pinned.includes(packagePath)) {
+    pinned.push(packagePath);
+    extensionContext.workspaceState.update('pinnedPackages', pinned);
+    triggerTreeDataLoad();
+  }
+}
+
+export function unpinPackage(packagePath: string) {
+  if (!extensionContext) return;
+  const pinned = getPinnedPackages();
+  const index = pinned.indexOf(packagePath);
+  if (index !== -1) {
+    pinned.splice(index, 1);
+    extensionContext.workspaceState.update('pinnedPackages', pinned);
+    triggerTreeDataLoad();
+  }
+}
 
 function triggerTreeDataLoad(): void {
   void loadTreeData().catch((error) => {
@@ -144,6 +253,7 @@ function triggerTreeDataLoad(): void {
 }
 
 export function registerTreeView(context: vsc.ExtensionContext): void {
+  extensionContext = context;
   treeViewDisposable = vsc.window.registerTreeDataProvider('smart_build_runner_view', provider);
   context.subscriptions.push({ dispose: () => treeViewDisposable?.dispose() });
 
@@ -155,7 +265,9 @@ export function registerTreeView(context: vsc.ExtensionContext): void {
         const packagePath = def.packagePath;
         const taskType = def.taskType;
         stoppedDeliberately.delete(packagePath);
-        if (taskType === 'watch') {
+        if (taskType === 'melos') {
+          provider.setMelosScriptStatus(packagePath, 'running');
+        } else if (taskType === 'watch') {
           provider.setStatus(packagePath, 'watching');
         } else {
           provider.setStatus(packagePath, 'building');
@@ -172,6 +284,20 @@ export function registerTreeView(context: vsc.ExtensionContext): void {
         activeExecutions.delete(packagePath);
 
         const taskName = e.execution.task.name;
+
+        if (taskType === 'melos') {
+          provider.setMelosScriptStatus(packagePath, 'idle');
+          if (e.exitCode !== undefined && e.exitCode !== 0) {
+            if (stoppedDeliberately.has(packagePath)) {
+              stoppedDeliberately.delete(packagePath);
+            } else {
+              vsc.window.showErrorMessage(`Melos script failed: "${taskName}"`);
+            }
+          } else {
+            vsc.window.showInformationMessage(`Melos script succeeded: "${taskName}"`);
+          }
+          return;
+        }
 
         if (e.exitCode !== undefined && e.exitCode !== 0) {
           if (taskType === 'watch') {
@@ -209,6 +335,10 @@ export function registerTreeView(context: vsc.ExtensionContext): void {
   watcher = vsc.workspace.createFileSystemWatcher(GLOB_PATTERN);
   context.subscriptions.push(watcher);
 
+  // Watch for melos.yaml changes as well
+  const melosWatcher = vsc.workspace.createFileSystemWatcher('**/melos.yaml');
+  context.subscriptions.push(melosWatcher);
+
   let debounceTimer: NodeJS.Timeout | undefined;
   const debouncedLoad = () => {
     clearTimeout(debounceTimer);
@@ -219,6 +349,10 @@ export function registerTreeView(context: vsc.ExtensionContext): void {
   watcher.onDidCreate(debouncedLoad);
   watcher.onDidChange(debouncedLoad);
   watcher.onDidDelete(debouncedLoad);
+
+  melosWatcher.onDidCreate(debouncedLoad);
+  melosWatcher.onDidChange(debouncedLoad);
+  melosWatcher.onDidDelete(debouncedLoad);
 
   context.subscriptions.push({ dispose: () => clearTimeout(debounceTimer) });
 
@@ -254,9 +388,88 @@ async function readYamlWithCache(uri: vsc.Uri, requestId: number): Promise<Pubsp
   }
 }
 
+interface MelosScript {
+  name: string;
+  run: string;
+  description?: string;
+}
+
+function parseMelosScripts(config: any): MelosScript[] {
+  if (!config || typeof config !== 'object') {
+    return [];
+  }
+  const scriptsConfig = config.scripts;
+  if (!scriptsConfig || typeof scriptsConfig !== 'object') {
+    return [];
+  }
+  const scripts: MelosScript[] = [];
+  for (const [name, val] of Object.entries(scriptsConfig)) {
+    if (typeof val === 'string') {
+      scripts.push({ name, run: val });
+    } else if (val && typeof val === 'object') {
+      const run = (val as any).run;
+      if (typeof run === 'string') {
+        scripts.push({
+          name,
+          run,
+          description: typeof (val as any).description === 'string' ? (val as any).description : undefined,
+        });
+      }
+    }
+  }
+  return scripts;
+}
+
 async function loadTreeData(): Promise<void> {
   const requestId = loadRequestController.beginRequest();
   const results = await scanWorkspace(GLOB_PATTERN);
+
+  const pinnedPackages = getPinnedPackages();
+  let isMelosWorkspace = false;
+  const melosScripts: MelosScriptTreeItem[] = [];
+
+  // Detect Melos in any workspace folder
+  const workspaces = vsc.workspace.workspaceFolders ?? [];
+  for (const workspace of workspaces) {
+    let scripts: MelosScript[] = [];
+    let foundMelosConfig = false;
+
+    // 1. Try melos.yaml
+    const melosYamlUri = vsc.Uri.joinPath(workspace.uri, 'melos.yaml');
+    try {
+      const bytes = await vsc.workspace.fs.readFile(melosYamlUri);
+      const parsed = yaml.parse(textDecoder.decode(bytes));
+      if (parsed && typeof parsed === 'object') {
+        foundMelosConfig = true;
+        scripts = parseMelosScripts(parsed);
+      }
+    } catch {
+      // 2. Try pubspec.yaml at root
+      const pubspecUri = vsc.Uri.joinPath(workspace.uri, 'pubspec.yaml');
+      try {
+        const bytes = await vsc.workspace.fs.readFile(pubspecUri);
+        const parsed = yaml.parse(textDecoder.decode(bytes));
+        if (parsed && typeof parsed === 'object' && parsed.melos) {
+          foundMelosConfig = true;
+          scripts = parseMelosScripts(parsed.melos);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (foundMelosConfig) {
+      isMelosWorkspace = true;
+      for (const script of scripts) {
+        melosScripts.push(
+          new MelosScriptTreeItem(script.name, script.run, workspace, script.description)
+        );
+      }
+    }
+  }
+
+  // Sort Melos scripts by name
+  melosScripts.sort((a, b) => a.scriptName.localeCompare(b.scriptName));
 
   const workspaceItems = new Map<string, ProjectTreeItem[]>();
   for (const { workspace, fileUris } of results) {
@@ -282,6 +495,7 @@ async function loadTreeData(): Promise<void> {
         const displayName = isDartWorkspace ? `${packageName} (workspace)` : packageName;
 
         const initialStatus = provider.getStatus(packagePath);
+        const isPinned = pinnedPackages.includes(packagePath);
 
         return new ProjectTreeItem(
           displayName,
@@ -290,12 +504,20 @@ async function loadTreeData(): Promise<void> {
           relative,
           isDartWorkspace,
           initialStatus,
+          isPinned,
         );
       }),
     );
 
     const items = pubspecs.filter((item): item is ProjectTreeItem => item !== null);
-    items.sort((a, b) => a.title.localeCompare(b.title));
+
+    // Sort packages: pinned first, then by title
+    items.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return a.title.localeCompare(b.title);
+    });
+
     workspaceItems.set(workspace.name, items);
   }
 
@@ -308,9 +530,9 @@ async function loadTreeData(): Promise<void> {
   if (!loadRequestController.isLatestRequest(requestId))
     return;
 
-  provider.setItems(items);
+  provider.setItems(items, melosScripts, isMelosWorkspace);
 
-  const hasItems = items.length > 0;
+  const hasItems = items.length > 0 || melosScripts.length > 0;
   await vsc.commands.executeCommand('setContext', 'smartBuildRunner.hasItems', hasItems);
   provider.refresh();
 }

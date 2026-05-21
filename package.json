@@ -2,8 +2,12 @@
   "name": "smart-flutter-build-runner",
   "displayName": "Smart Flutter Build Runner",
   "description": "An enhanced, smart VS Code extension to manage Flutter and Dart build_runner tasks with active status indicators, quick controls, and auto-detecting FVM.",
-  "version": "1.0.5",
+  "version": "1.0.4",
   "publisher": "hadesptit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HadesPTIT/smart-flutter-build-runner.git"
+  },
   "license": "MIT",
   "engines": {
     "vscode": "^1.80.0"
@@ -97,6 +101,28 @@
         "command": "smart_build_runner.buildCurrentFile",
         "title": "Build Current File",
         "icon": "$(zap)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.stopAll",
+        "title": "Stop All Tasks",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.pinPackage",
+        "title": "Pin Package"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.unpinPackage",
+        "title": "Unpin Package"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.runMelosScript",
+        "title": "Run Melos Script",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -128,45 +154,81 @@
         {
           "command": "smart_build_runner.buildCurrentFile",
           "when": "editorLangId == dart"
+        },
+        {
+          "command": "smart_build_runner.stopAll",
+          "when": "false"
+        },
+        {
+          "command": "smart_build_runner.pinPackage",
+          "when": "false"
+        },
+        {
+          "command": "smart_build_runner.unpinPackage",
+          "when": "false"
+        },
+        {
+          "command": "smart_build_runner.runMelosScript",
+          "when": "false"
         }
       ],
       "view/item/context": [
         {
           "command": "smart_build_runner.build",
-          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed)",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed || viewItem == file-idle-pinned || viewItem == file-failed-pinned)",
           "group": "inline@1"
         },
         {
           "command": "smart_build_runner.watch",
-          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed)",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed || viewItem == file-idle-pinned || viewItem == file-failed-pinned)",
           "group": "inline@2"
         },
         {
           "command": "smart_build_runner.clean",
-          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed)",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed || viewItem == file-idle-pinned || viewItem == file-failed-pinned)",
           "group": "inline@3"
         },
         {
           "command": "smart_build_runner.cleanBuild",
-          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed)",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-failed || viewItem == file-idle-pinned || viewItem == file-failed-pinned)",
           "group": "inline@4"
         },
         {
           "command": "smart_build_runner.stop",
-          "when": "view == smart_build_runner_view && (viewItem == file-watching || viewItem == file-building)",
+          "when": "view == smart_build_runner_view && (viewItem == file-watching || viewItem == file-building || viewItem == file-watching-pinned || viewItem == file-building-pinned)",
           "group": "inline@1"
         },
         {
           "command": "smart_build_runner.showTerminal",
-          "when": "view == smart_build_runner_view && (viewItem == file-watching || viewItem == file-building)",
+          "when": "view == smart_build_runner_view && (viewItem == file-watching || viewItem == file-building || viewItem == file-watching-pinned || viewItem == file-building-pinned)",
           "group": "inline@2"
+        },
+        {
+          "command": "smart_build_runner.runMelosScript",
+          "when": "view == smart_build_runner_view && viewItem == melos-script",
+          "group": "inline@1"
+        },
+        {
+          "command": "smart_build_runner.pinPackage",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle || viewItem == file-watching || viewItem == file-building || viewItem == file-failed)",
+          "group": "smart_build_runner@1"
+        },
+        {
+          "command": "smart_build_runner.unpinPackage",
+          "when": "view == smart_build_runner_view && (viewItem == file-idle-pinned || viewItem == file-watching-pinned || viewItem == file-building-pinned || viewItem == file-failed-pinned)",
+          "group": "smart_build_runner@1"
         }
       ],
       "view/title": [
         {
           "command": "smart_build_runner.refresh",
           "when": "view == smart_build_runner_view",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "smart_build_runner.stopAll",
+          "when": "view == smart_build_runner_view",
+          "group": "navigation@2"
         }
       ],
       "editor/context": [
