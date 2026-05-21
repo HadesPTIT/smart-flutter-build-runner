@@ -2,52 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.5] (21b2796) - 2026-05-21
+## [1.0.3] - 2026-05-21
 
 ### Added
+- **Build Current File**: Added command `smart_build_runner.buildCurrentFile` to compile only the active Dart file using `build_runner`'s `--build-filter` flag.
+- **Context Menus & Actions**: Integrated the "Build Current File" action into the editor title actions (top-right button), editor context menu (right-click), explorer context menu (right-click on `.dart` files), and VS Code Command Palette.
 - **Keyboard Shortcuts**: Assigned default hotkeys for "Build Current File":
   - **macOS**: `Cmd + Option + B`
   - **Windows/Linux**: `Ctrl + Alt + B`
   - Restricted the keys to run only when editing a Dart file (`editorLangId == dart`).
-
-### Changed Files
-| File Name | Description |
-| :--- | :--- |
-| [package.json](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/package.json) | Add keybindings configuration block and bump version to `1.0.5`. |
-
----
-
-## [1.0.4] (1cdd517) - 2026-05-21
-
-### Added
 - **Toast Notifications**: Added VS Code toast notifications for build task events (success message for one-shot tasks, error message for failed tasks).
 - **Interactive Quick Actions**: Integrated action buttons in the error popups:
   - **"Show Terminal"** to focus the failed task's terminal output.
   - **"Retry"** to rerun the failed task.
 - **Task Re-run Memory**: Implemented a `lastRunConfig` cache to preserve exact arguments for retry execution.
 - **Manual Stop Suppression**: Added `stoppedDeliberately` logic to skip error popups when tasks are manually stopped by the user.
+- **Visual Guides**: Added high-resolution screenshots showing the extension interface in action in the `README.md`.
 
 ### Changed Files
 | File Name | Description |
 | :--- | :--- |
-| [package.json](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/package.json) | Bump version to `1.0.4`. |
-| [src/tasks.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/tasks.ts) | Track manually stopped tasks, record running parameters, and implement `retryTask`. |
+| [package.json](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/package.json) | Register `smart_build_runner.buildCurrentFile` command, configure keybindings, editor context/title, explorer context, and command palette. Bump version to `1.0.3`. |
+| [src/tasks.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/tasks.ts) | Track manually stopped tasks, record running parameters, and implement `retryTask`, `findPackageRoot`, and `buildCurrentFile` execution. |
 | [src/tree-view.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/tree-view.ts) | Handle task exit codes, show success/error alerts, and execute actions when buttons are clicked. |
-
----
-
-## [1.0.3] (f0f6b96) - 2026-05-21
-
-### Added
-- **Build Current File**: Added a new command `smart_build_runner.buildCurrentFile` to compile only the active Dart file using `build_runner`'s `--build-filter` flag.
-- **Context Menus & Actions**: Integrated the "Build Current File" action into the editor title actions (top-right button), editor context menu (right-click), explorer context menu (right-click on `.dart` files), and VS Code Command Palette.
-- **Workspace Fallback & Warning**: Implemented a warning confirmation when `build_runner` dependency is not found in the package or parent workspace root.
-
-### Changed Files
-| File Name | Description |
-| :--- | :--- |
-| [package.json](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/package.json) | Register `smart_build_runner.buildCurrentFile` command, configure it for editor context/title, explorer context, and command palette. Bump version to `1.0.3`. |
-| [src/tasks.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/tasks.ts) | Implement `findPackageRoot` recursive helper and `buildCurrentFile` task execution. |
 | [src/extension.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/extension.ts) | Register command `smart_build_runner.buildCurrentFile`. |
 
 ---
