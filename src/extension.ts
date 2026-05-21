@@ -1,6 +1,6 @@
 import * as vsc from 'vscode';
 import { ProjectTreeItem, refreshTreeView, registerTreeView } from './tree-view';
-import { createTask, stopTask, showTerminal } from './tasks';
+import { createTask, stopTask, showTerminal, buildCurrentFile } from './tasks';
 
 export async function activate(context: vsc.ExtensionContext) {
   context.subscriptions.push(
@@ -44,6 +44,12 @@ export async function activate(context: vsc.ExtensionContext) {
     vsc.commands.registerCommand(
       'smart_build_runner.refresh',
       () => refreshTreeView(),
+    ),
+
+    // 8. Build Current File Command
+    vsc.commands.registerCommand(
+      'smart_build_runner.buildCurrentFile',
+      (uri?: vsc.Uri) => buildCurrentFile(uri),
     ),
   );
 

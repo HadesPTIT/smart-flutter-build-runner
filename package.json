@@ -2,7 +2,7 @@
   "name": "smart-flutter-build-runner",
   "displayName": "Smart Flutter Build Runner",
   "description": "An enhanced, smart VS Code extension to manage Flutter and Dart build_runner tasks with active status indicators, quick controls, and auto-detecting FVM.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "hadesptit",
   "license": "MIT",
   "engines": {
@@ -91,6 +91,12 @@
         "command": "smart_build_runner.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "category": "Smart Flutter Build Runner",
+        "command": "smart_build_runner.buildCurrentFile",
+        "title": "Build Current File",
+        "icon": "$(zap)"
       }
     ],
     "menus": {
@@ -118,6 +124,10 @@
         {
           "command": "smart_build_runner.showTerminal",
           "when": "false"
+        },
+        {
+          "command": "smart_build_runner.buildCurrentFile",
+          "when": "editorLangId == dart"
         }
       ],
       "view/item/context": [
@@ -157,6 +167,27 @@
           "command": "smart_build_runner.refresh",
           "when": "view == smart_build_runner_view",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "smart_build_runner.buildCurrentFile",
+          "when": "editorLangId == dart",
+          "group": "smart_build_runner@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "smart_build_runner.buildCurrentFile",
+          "when": "editorLangId == dart",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "smart_build_runner.buildCurrentFile",
+          "when": "resourceExtname == .dart",
+          "group": "smart_build_runner@1"
         }
       ]
     },

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] (f0f6b96) - 2026-05-21
+
+### Added
+- **Build Current File**: Added a new command `smart_build_runner.buildCurrentFile` to compile only the active Dart file using `build_runner`'s `--build-filter` flag.
+- **Context Menus & Actions**: Integrated the "Build Current File" action into the editor title actions (top-right button), editor context menu (right-click), explorer context menu (right-click on `.dart` files), and VS Code Command Palette.
+- **Workspace Fallback & Warning**: Implemented a warning confirmation when `build_runner` dependency is not found in the package or parent workspace root.
+
+### Changed Files
+| File Name | Description |
+| :--- | :--- |
+| [package.json](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/package.json) | Register `smart_build_runner.buildCurrentFile` command, configure it for editor context/title, explorer context, and command palette. Bump version to `1.0.3`. |
+| [src/tasks.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/tasks.ts) | Implement `findPackageRoot` recursive helper and `buildCurrentFile` task execution. |
+| [src/extension.ts](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/src/extension.ts) | Register command `smart_build_runner.buildCurrentFile`. |
+
+---
+
 ## [1.0.2] (f579a16) - 2026-05-20
 
 ### Fixed

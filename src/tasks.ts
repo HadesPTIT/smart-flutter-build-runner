@@ -2,6 +2,12 @@ import * as path from 'node:path';
 import * as vsc from 'vscode';
 import { readYaml } from './read-yaml';
 
+interface PubspecYaml {
+  name?: unknown;
+  dependencies?: Record<string, unknown>;
+  dev_dependencies?: Record<string, unknown>;
+}
+
 // Map to track active executions by package path
 export const activeExecutions = new Map<string, vsc.TaskExecution>();
 
@@ -59,7 +65,7 @@ export async function createTask(
     command = `${fvmPrefix}dart run build_runner ${type} ${args}${workspaceArg}`;
   }
 
-  const pubspec = await readYaml(uri);
+  const pubspec = await readYaml(uri) as PubspecYaml | null;
   const name = (typeof pubspec?.name === 'string') ? pubspec.name : title;
   const taskLabel = `${type}: ${name}${isWorkspace ? ' (workspace)' : ''}`;
 
@@ -169,3 +175,146 @@ export function showTerminal(packagePath: string) {
     vsc.window.showInformationMessage('Terminal for this task was not found.');
   }
 }
+
+export async function findPackageRoot(startDir: string): Promise<{ packagePath: string; pubspecUri: vsc.Uri } | null> {
+  let currentDir = startDir;
+  while (currentDir) {
+    const pubspecUri = vsc.Uri.file(path.join(currentDir, 'pubspec.yaml'));
+    try {
+      const stat = await vsc.workspace.fs.stat(pubspecUri);
+      if (stat.type === vsc.FileType.File) {
+        return {
+          packagePath: currentDir,
+          pubspecUri,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+    currentDir = parentDir;
+  }
+  return null;
+}
+
+export async function buildCurrentFile(uri?: vsc.Uri) {
+  let targetUri = uri;
+  if (!targetUri) {
+    targetUri = vsc.window.activeTextEditor?.document.uri;
+  }
+  if (!targetUri || !targetUri.fsPath.endsWith('.dart')) {
+    vsc.window.showErrorMessage('This command can only be run on a Dart (.dart) file.');
+    return;
+  }
+
+  const filePath = targetUri.fsPath;
+  const startDir = path.dirname(filePath);
+  const packageRootInfo = await findPackageRoot(startDir);
+  if (!packageRootInfo) {
+    vsc.window.showErrorMessage('Could not find pubspec.yaml for the current file.');
+    return;
+  }
+
+  const { packagePath, pubspecUri } = packageRootInfo;
+  
+  // Calculate relative path with forward slashes
+  const relativePath = path.relative(packagePath, filePath).replace(/\\/g, '/');
+  const filterPattern = relativePath.replace(/\.dart$/, '.*');
+
+  // Check if build_runner is present in package pubspec
+  const pubspec = await readYaml(pubspecUri) as PubspecYaml | null;
+  const deps = pubspec?.dependencies ?? {};
+  const devDeps = pubspec?.dev_dependencies ?? {};
+  const hasBuildRunner = ('build_runner' in deps) || ('build_runner' in devDeps);
+
+  if (!hasBuildRunner) {
+    // Soft check: check if there's a workspace-level pubspec.yaml with build_runner
+    let foundInWorkspace = false;
+    const parentRoot = await findPackageRoot(path.dirname(packagePath));
+    if (parentRoot) {
+      const parentPubspec = await readYaml(parentRoot.pubspecUri) as PubspecYaml | null;
+      const parentDeps = parentPubspec?.dependencies ?? {};
+      const parentDevDeps = parentPubspec?.dev_dependencies ?? {};
+      if (('build_runner' in parentDeps) || ('build_runner' in parentDevDeps)) {
+        foundInWorkspace = true;
+      }
+    }
+
+    if (!foundInWorkspace) {
+      const choice = await vsc.window.showWarningMessage(
+        `build_runner dependency was not detected in this package ('${pubspec?.name || path.basename(packagePath)}').`,
+        'Run Anyway',
+        'Cancel'
+      );
+      if (choice !== 'Run Anyway') {
+        return;
+      }
+    }
+  }
+
+  // Detect FVM (FVM check starts from packagePath)
+  const globalFvm = vsc.workspace.getConfiguration().get('smart_build_runner.fvm', false);
+  let useFvm = globalFvm;
+  if (!useFvm) {
+    let currentDir = packagePath;
+    while (currentDir) {
+      try {
+        const fvmUri = vsc.Uri.file(path.join(currentDir, '.fvm'));
+        const stat = await vsc.workspace.fs.stat(fvmUri);
+        if (stat.type === vsc.FileType.Directory) {
+          useFvm = true;
+          break;
+        }
+      } catch {
+        // ignore
+      }
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir) {
+        break;
+      }
+      currentDir = parentDir;
+    }
+  }
+
+  const fvmPrefix = useFvm ? 'fvm ' : '';
+  const command = `${fvmPrefix}dart run build_runner build --delete-conflicting-outputs --build-filter="${filterPattern}"`;
+  
+  const fileName = path.basename(filePath);
+  const taskLabel = `build file: ${fileName}`;
+
+  const definition: BuildRunnerTaskDefinition = {
+    type: 'smart_build_runner',
+    packagePath,
+    taskType: 'build',
+  };
+
+  const task = new vsc.Task(
+    definition,
+    vsc.TaskScope.Workspace,
+    taskLabel,
+    'smart_build_runner',
+    new vsc.ShellExecution(command, { cwd: packagePath }),
+  );
+
+  task.presentationOptions = {
+    reveal: vsc.TaskRevealKind.Always,
+    panel: vsc.TaskPanelKind.Shared,
+    clear: false,
+    close: false,
+    showReuseMessage: false,
+    focus: true,
+  };
+
+  try {
+    const execution = await vsc.tasks.executeTask(task);
+    activeExecutions.set(packagePath, execution);
+    return execution;
+  } catch (err: any) {
+    vsc.window.showErrorMessage(`Failed to start task '${taskLabel}': ${err.message}`);
+    return null;
+  }
+}
+
