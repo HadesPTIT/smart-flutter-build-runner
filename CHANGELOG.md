@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] (21b2796) - 2026-05-21
+
+### Added
+- **Keyboard Shortcuts**: Assigned default hotkeys for "Build Current File":
+  - **macOS**: `Cmd + Option + B`
+  - **Windows/Linux**: `Ctrl + Alt + B`
+  - Restricted the keys to run only when editing a Dart file (`editorLangId == dart`).
+
+### Changed Files
+| File Name | Description |
+| :--- | :--- |
+| [package.json](file:///Users/g1-huong.pham-dev/Documents/Docs/vs_build_runner_ext/package.json) | Add keybindings configuration block and bump version to `1.0.5`. |
+
+---
+
 ## [1.0.4] (1cdd517) - 2026-05-21
 
 ### Added
